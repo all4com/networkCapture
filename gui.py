@@ -6,6 +6,7 @@ from datetime import datetime
 import psutil
 import os
 import json
+from common import get_packet_name
 
 class PacketCaptureGUI:
     def __init__(self, root):
@@ -51,7 +52,7 @@ class PacketCaptureGUI:
         self.listbox_frame = tk.Frame(self.root)
         self.listbox_frame.pack(side="left", fill="y")
 
-        self.listbox = Listbox(self.listbox_frame, width=40, height=30)
+        self.listbox = Listbox(self.listbox_frame, width=70, height=30)
         self.listbox.pack(side="left", fill="y")
 
         self.scrollbar = Scrollbar(self.listbox_frame)
@@ -144,9 +145,10 @@ class PacketCaptureGUI:
                     
                     src_info = "Srv->Cli" if tcp_layer.sport == [55661, 54631, 56621] else "Cli->Srv"
                     packet_type = int.from_bytes(packet[Raw].load[2:4], byteorder='little')
+                    packet_name = get_packet_name(packet_type)
                     timestamp = datetime.now().strftime('%Y/%m/%d %H:%M:%S')
                     data_size = int.from_bytes(packet[Raw].load[0:2], byteorder='little')
-                    summary = f"{timestamp} [{src_info}] {hex(packet_type)} ({data_size})"
+                    summary = f" [{packet_name}] {timestamp} [{src_info}] {hex(packet_type)} ({data_size})"
                     self.listbox.insert(tk.END, summary)
                     self.listbox.see(tk.END)  # Scroll to the bottom
 
