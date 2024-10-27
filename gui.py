@@ -1,6 +1,6 @@
 import threading
 import tkinter as tk
-from tkinter import Listbox, Text, Scrollbar, OptionMenu, StringVar, Button, Frame, messagebox
+from tkinter import Listbox, Text, Scrollbar, OptionMenu, StringVar, Button, Frame, messagebox, Menu
 from scapy.all import sniff, TCP, IP, Raw
 from datetime import datetime
 import psutil
@@ -15,7 +15,7 @@ class PacketCaptureGUI:
         self.root.title("Redstone Packet Capture")
         self.root.geometry("800x600")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)  # ウィンドウを閉じるイベントを設定
-        
+
         self.packet_list = []
         self.sniffer_thread = None
         self.sniffing = False
@@ -48,33 +48,62 @@ class PacketCaptureGUI:
         return interfaces
 
     def setup_listbox(self):
-        """Setup the listbox for displaying packet summaries."""
-        self.listbox_frame = tk.Frame(self.root)
-        self.listbox_frame.pack(side="left", fill="y")
+        """Setup the listbox for displaying packet summaries with horizontal scroll."""
+        self.listbox_frame = Frame(self.root)
+        self.listbox_frame.pack(side="left", fill="both", expand=True)
 
-        self.listbox = Listbox(self.listbox_frame, width=70, height=30)
-        self.listbox.pack(side="left", fill="y")
+        self.listbox = Listbox(self.listbox_frame, font="TkFixedFont")
+        self.listbox.pack(side="left", fill="both", expand=True)
 
-        self.scrollbar = Scrollbar(self.listbox_frame)
-        self.scrollbar.pack(side="right", fill="y")
+        self.scrollbar_y = Scrollbar(self.listbox_frame)
+        self.scrollbar_y.pack(side="right", fill="y")
+        self.listbox.config(yscrollcommand=self.scrollbar_y.set)
+        self.scrollbar_y.config(command=self.listbox.yview)
 
-        self.listbox.config(yscrollcommand=self.scrollbar.set)
-        self.scrollbar.config(command=self.listbox.yview)
-        
+
+        self.scrollbar_x = Scrollbar(self.listbox, orient="horizontal")
+        self.scrollbar_x.pack(side="bottom", fill="x")
+        self.listbox.config(xscrollcommand=self.scrollbar_x.set)
+        self.scrollbar_x.config(command=self.listbox.xview)
         self.listbox.bind("<<ListboxSelect>>", self.display_packet_details)
+
+        # キーボード操作のバインド
+        self.root.bind('<Control-c>', self.copy_selection)  # Ctrl+Cでコピー
+
+    def copy_selection(self, event=None):
+        """Copy the selected item from the listbox to the clipboard."""
+        selection = self.listbox.curselection()
+        if selection:
+            index = selection[0]
+            item = self.listbox.get(index)
+            self.root.clipboard_clear()  # Clear the clipboard
+            self.root.clipboard_append(item.split(" ")[-1])  # Append the selected item to the clipboard
 
     def setup_text_boxes(self):
         """Setup text boxes for packet details and input."""
-        self.text_detail = Text(self.root, width=60, height=15, wrap="word", state="disabled")
+        self.text_detail = Text(self.root, width=70, wrap="word", state="disabled")
         self.text_detail.pack(side="top", fill="both", expand=True)
 
-        self.text_input = Text(self.root, width=60, height=15, wrap="word")
-        self.text_input.pack(side="bottom", fill="both", expand=True)
+        # self.text_input = Text(self.root, width=70, wrap="word")
+        # self.text_input.pack(side="bottom", fill="both", expand=True)
+
+    def setup_context_menu(self):
+        """Setup context menu for the listbox."""
+        self.context_menu = Menu(self.root, tearoff=0)  # context menu
+        self.context_menu.add_command(label="Copy", command=self.copy_selection)  # add copy command
+
+        # right click event
+        self.listbox.bind("<Button-3>", self.show_context_menu)
+
+    def show_context_menu(self, event):
+        """Show context menu on right-click."""
+        self.context_menu.post(event.x_root, event.y_root)
 
     def setup_buttons(self):
         """Setup Start/Stop button for packet capture."""
         self.start_button = Button(self.interface_frame, text="Start", command=self.start_stop_sniffer)
         self.start_button.pack(side="left", padx=10)
+        self.setup_context_menu()
 
     def format_binary_data(self, raw_data):
         """Format raw data into a hex and ASCII string view."""
@@ -85,7 +114,7 @@ class PacketCaptureGUI:
         for i in range(len(raw_data)):
             hex_output += f"{raw_data[i]:02x} "
             ascii_output += chr(raw_data[i]) if 32 <= raw_data[i] < 127 else '.'
-            
+
             if (i + 1) % 16 == 0:
                 result += f"{hex_output:<48} | {ascii_output}\n"
                 hex_output = ""
@@ -93,7 +122,7 @@ class PacketCaptureGUI:
 
         if hex_output:
             result += f"{hex_output:<48} | {ascii_output}\n"
-        
+
         return result
 
     def display_packet_details(self, event):
@@ -102,15 +131,15 @@ class PacketCaptureGUI:
         if selection:
             index = selection[0]
             packet = self.packet_list[index]
-            
+
             self.text_detail.config(state="normal")
             self.text_detail.delete(1.0, tk.END)
-            
+
             if Raw in packet:
                 raw_data = packet[Raw].load
                 self.text_detail.insert(tk.END, "Data:\n")
                 self.text_detail.insert(tk.END, self.format_binary_data(raw_data))
-            
+
             self.text_detail.config(state="disabled")
             self.listbox.see(tk.END)
 
@@ -142,13 +171,13 @@ class PacketCaptureGUI:
                 tcp_layer = packet[TCP]
                 if tcp_layer.flags == "PA":
                     self.packet_list.append(packet)
-                    
+
                     src_info = "Srv->Cli" if tcp_layer.sport == [55661, 54631, 56621] else "Cli->Srv"
                     packet_type = int.from_bytes(packet[Raw].load[2:4], byteorder='little')
                     packet_name = get_packet_name(packet_type)
                     timestamp = datetime.now().strftime('%Y/%m/%d %H:%M:%S')
                     data_size = int.from_bytes(packet[Raw].load[0:2], byteorder='little')
-                    summary = f" [{packet_name}] {timestamp} [{src_info}] {hex(packet_type)} ({data_size})"
+                    summary = f"{timestamp} [{src_info}] {hex(packet_type)} ({data_size:4}) {packet_name}"
                     self.listbox.insert(tk.END, summary)
                     self.listbox.see(tk.END)  # Scroll to the bottom
 
