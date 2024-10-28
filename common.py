@@ -981,3 +981,16 @@ def get_packet_name(id) -> str:
     if id in PACKET_NAME :
         return PACKET_NAME[id]
     return "Packet not identified"
+
+SERVER_NAME = {
+    55661:"LOGIN_SERVER_PORT", 
+    54631:"GAME_SERVER_PORT", 
+    56621:"BROADCAST_PORT", 
+}
+def get_server_name(port) -> str:
+    if port in SERVER_NAME:
+        return SERVER_NAME[port]
+    return "Port not identified"
+
+def get_server_port():
+    return SERVER_NAME.keys()
